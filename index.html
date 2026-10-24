@@ -477,7 +477,7 @@
         <button id="prevMonthBtn" aria-label="Prejšnji mesec">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
-        <button class="month-title" id="monthTitle" type="button" aria-label="Izberi mesec"><span id="monthTitleText">Oktober 2026</span><span class="month-title-caret" aria-hidden="true">⌄</span></button>
+        <button class="month-title" id="monthTitle" type="button" aria-label="Izberi mesec"><span id="monthTitleText">Oktober 2026</span></button>
         <button id="nextMonthBtn" aria-label="Naslednji mesec">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
@@ -511,10 +511,7 @@
   <div class="modal-overlay" id="monthModal" role="dialog" aria-modal="true" aria-labelledby="monthModalTitle">
     <div class="modal-card month-modal-card">
       <div class="modal-header"><div class="modal-title" id="monthModalTitle">Izberi mesec</div><button class="icon-btn" type="button" id="closeMonthModal" aria-label="Zapri">✕</button></div>
-      <div class="month-pick-fields">
-        <div class="form-group"><label for="pickMonth">Mesec</label><select id="pickMonth" class="form-control"></select></div>
-        <div class="form-group"><label for="pickYear">Leto</label><select id="pickYear" class="form-control"></select></div>
-      </div>
+      <div class="form-group"><label for="pickMonth">Mesec in leto</label><input type="month" id="pickMonth" class="form-control" required></div>
       <button class="btn-submit" type="button" id="applyMonthBtn">Prikaži mesec</button>
       <button class="btn-secondary" type="button" id="monthTodayBtn">Danes – tekoči mesec</button>
     </div>
@@ -540,6 +537,16 @@
       <div class="form-group">
         <label>Znesek (€)</label>
         <input type="number" step="0.01" id="inputAmount" class="form-control" placeholder="0.00">
+      </div>
+
+      <div class="form-group">
+        <label for="inputStartMonth">Velja od meseca</label>
+        <input type="month" id="inputStartMonth" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label for="inputEndMonth">Velja do meseca (neobvezno)</label>
+        <input type="month" id="inputEndMonth" class="form-control">
+        <small class="form-help">Pusti prazno, če se redna položnica ponavlja brez določenega konca.</small>
       </div>
 
       <div class="form-group">
@@ -716,18 +723,22 @@
     }
     function openAddModal() {
       document.getElementById('inputTitle').value=''; document.getElementById('inputAmount').value='';
+      document.getElementById('inputStartMonth').value=getMonthKey(currentDate); document.getElementById('inputEndMonth').value='';
       document.getElementById('optFuture').checked=true; updateOptionStyle(); document.getElementById('addModal').classList.add('active');
     }
     function closeAddModal(){document.getElementById('addModal').classList.remove('active');}
-    function updateOptionStyle(){const future=document.getElementById('optFuture').checked;document.getElementById('optFutureLabel').classList.toggle('selected',future);document.getElementById('optCurrentLabel').classList.toggle('selected',!future);}
+    function updateOptionStyle(){const future=document.getElementById('optFuture').checked;document.getElementById('optFutureLabel').classList.toggle('selected',future);document.getElementById('optCurrentLabel').classList.toggle('selected',!future);document.getElementById('inputEndMonth').disabled=!future;if(!future)document.getElementById('inputEndMonth').value=document.getElementById('inputStartMonth').value;}
     async function saveBill() {
       const title=document.getElementById('inputTitle').value.trim();
       const amount=Number(document.getElementById('inputAmount').value);
       const recurring=document.getElementById('optFuture').checked;
+      const startMonth=document.getElementById('inputStartMonth').value;
+      const endMonth=recurring?(document.getElementById('inputEndMonth').value||null):startMonth;
       if(!title){alert('Prosimo, vnesite naziv položnice.');return;}
       if(!Number.isFinite(amount)||amount<0){alert('Prosimo, vnesite veljaven znesek.');return;}
+      if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(startMonth)||(endMonth&&(!/^\d{4}-(0[1-9]|1[0-2])$/.test(endMonth)||endMonth<startMonth))){showToast('Preveri začetni in končni mesec.',true);return;}
       try {
-        await api('/api/bills',{method:'POST',body:JSON.stringify({title,amount,month:getMonthKey(currentDate),recurring})});
+        await api('/api/bills',{method:'POST',body:JSON.stringify({title,amount,month:startMonth,startMonth,endMonth,recurring})});
         closeAddModal(); await loadMonth(); showToast('Položnica je shranjena v bazi.');
       } catch(e){showError(e); showToast('Položnice ni bilo mogoče shraniti.', true)}
     }
@@ -736,18 +747,17 @@
     document.getElementById('nextMonthBtn').addEventListener('click',()=>changeMonth(1));
     document.getElementById('todayBtn').addEventListener('click',()=>{currentDate=new Date();currentDate.setDate(1);loadMonth().catch(showError)});
     function openMonthPicker() {
-      const monthSelect = document.getElementById('pickMonth');
-      const yearSelect = document.getElementById('pickYear');
-      if (!monthSelect.options.length) MONTH_NAMES.forEach((name, index) => monthSelect.add(new Option(name, String(index + 1))));
-      if (!yearSelect.options.length) { const y = new Date().getFullYear(); for (let year = y - 10; year <= y + 10; year++) yearSelect.add(new Option(String(year), String(year))); }
-      monthSelect.value = String(currentDate.getMonth() + 1);
-      yearSelect.value = String(currentDate.getFullYear());
+      document.getElementById('pickMonth').value = getMonthKey(currentDate);
       document.getElementById('monthModal').classList.add('active');
     }
     function closeMonthPicker() { document.getElementById('monthModal').classList.remove('active'); }
     document.getElementById('monthTitle').addEventListener('click', openMonthPicker);
     document.getElementById('closeMonthModal').addEventListener('click', closeMonthPicker);
-    document.getElementById('applyMonthBtn').addEventListener('click', () => { currentDate = new Date(Number(document.getElementById('pickYear').value), Number(document.getElementById('pickMonth').value) - 1, 1); closeMonthPicker(); loadMonth().catch(showError); });
+    document.getElementById('applyMonthBtn').addEventListener('click', () => {
+      const value=document.getElementById('pickMonth').value;
+      if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)){showToast('Izberi veljaven mesec.',true);return;}
+      const [y,m]=value.split('-').map(Number); currentDate = new Date(y,m-1,1); closeMonthPicker(); loadMonth().catch(showError);
+    });
     document.getElementById('monthTodayBtn').addEventListener('click', () => { currentDate = new Date(); currentDate.setDate(1); closeMonthPicker(); loadMonth().catch(showError); });
     document.getElementById('monthModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeMonthPicker(); });
     document.querySelectorAll('.modal-overlay').forEach(overlay=>overlay.addEventListener('click',e=>{if(e.target===overlay){overlay.classList.remove('active');if(overlay.id==='editModal')editingBill=null;}}));

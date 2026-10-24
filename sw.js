@@ -1,4 +1,4 @@
-const CACHE_NAME = 'poloznice-v4';
+const CACHE_NAME = 'poloznice-v5';
 const urlsToCache = [
   './',
   './index.html',
