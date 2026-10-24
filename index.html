@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Moje Položnice</title>
+
+  <!-- PWA & Mobile Settings -->
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Položnice">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧾</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧾</text></svg>">
+
+  <style>
+    :root {
+      --primary: #2563eb;          /* Modern Royal Blue */
+      --primary-dark: #1d4ed8;     /* Deep Blue */
+      --primary-light: #eff6ff;    /* Soft Blue Tint */
+      --success: #10b981;          /* Green Check */
+      --success-bg: #ecfdf5;
+      --bg: #f8fafc;               /* Clean Light Background */
+      --card-bg: #ffffff;
+      --text: #0f172a;             /* Dark Slate Text */
+      --text-muted: #64748b;       /* Slate Muted */
+      --border: #e2e8f0;           /* Border */
+      --radius: 18px;
+      --shadow: 0 6px 16px -4px rgba(37, 99, 235, 0.1), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+      padding-bottom: 40px;
+    }
+
+    .app-container {
+      width: 100%;
+      max-width: 480px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Header & Month Selector - Blue Gradient */
+    header {
+      background: linear-gradient(135deg, #1e40af, #3b82f6);
+      color: white;
+      padding: 22px;
+      border-radius: var(--radius);
+      box-shadow: 0 10px 24px -6px rgba(37, 99, 235, 0.35);
+    }
+
+    .month-selector {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .month-selector button {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .month-selector button:active {
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    .month-title {
+      font-size: 21px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+
+    /* Summary Card */
+    .summary-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(8px);
+      padding: 12px 14px;
+      border-radius: 14px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      opacity: 0.9;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    /* Bills List */
+    .bills-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .bill-item {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      transition: all 0.2s ease;
+    }
+
+    .bill-item.paid {
+      background: var(--success-bg);
+      border-color: #a7f3d0;
+    }
+
+    .bill-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* Round Circle Checkbox (Krožec) */
+    .checkbox-circle {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 2px solid #cbd5e1;
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.2s ease;
+      color: white;
+    }
+
+    .bill-item.paid .checkbox-circle {
+      background: var(--success);
+      border-color: var(--success);
+    }
+
+    .bill-title-container {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .bill-title {
+      font-weight: 600;
+      font-size: 16px;
+      color: var(--text);
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .bill-item.paid .bill-title {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+
+    /* Visual Badges for Recurring vs One-time */
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      width: fit-content;
+    }
+
+    .badge.recurring {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .badge.single {
+      background: #f1f5f9;
+      color: #64748b;
+    }
+
+    .bill-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .amount-input-group {
+      display: flex;
+      align-items: center;
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 8px;
+      width: 95px;
+    }
+
+    .amount-input-group span {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-right: 2px;
+    }
+
+    .amount-input {
+      border: none;
+      background: transparent;
+      width: 100%;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      outline: none;
+      text-align: right;
+    }
+
+    /* Modern SVG Action Buttons */
+    .icon-btn {
+      background: #eff6ff;
+      border: none;
+      color: var(--primary);
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+
+    .icon-btn:hover {
+      background: var(--primary);
+      color: white;
+    }
+
+    .icon-btn.danger {
+      color: #ef4444;
+      background: #fef2f2;
+    }
+
+    .icon-btn.danger:hover {
+      background: #ef4444;
+      color: white;
+    }
+
+    /* Add Bill Card at the bottom of the list */
+    .add-bill-card {
+      background: #eff6ff;
+      border: 2px dashed #bfdbfe;
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      color: var(--primary-dark);
+      font-weight: 700;
+      font-size: 15px;
+      transition: all 0.2s ease;
+      margin-top: 4px;
+    }
+
+    .add-bill-card:hover {
+      background: #dbeafe;
+      border-color: var(--primary);
+    }
+
+    .add-bill-card:active {
+      transform: scale(0.99);
+    }
+
+    /* Modal Overlay */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 23, 42, 0.4);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-card {
+      background: #ffffff;
+      width: 100%;
+      max-width: 480px;
+      border-radius: 24px 24px 0 0;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      animation: slideUp 0.2s ease-out;
+      border-top: 4px solid var(--primary);
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .form-control {
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      font-size: 15px;
+      outline: none;
+      color: var(--text);
+    }
+
+    .form-control:focus {
+      border-color: var(--primary);
+      background: #ffffff;
+    }
+
+    /* Option Radio Cards */
+    .option-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .option-card {
+      background: #f8fafc;
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .option-card input[type="radio"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--primary);
+    }
+
+    .option-card.selected {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    .btn-submit {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 14px;
+      border-radius: 14px;
+      font-weight: 700;
+      font-size: 15px;
+      cursor: pointer;
+      box-shadow: 0 6px 14px rgba(37, 99, 235, 0.25);
+      margin-top: 6px;
+      transition: background 0.2s ease;
+    }
+
+    .btn-submit:hover {
+      background: var(--primary-dark);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 30px 20px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- Header with Month & Summary -->
+    <header>
+      <div class="month-selector">
+        <button id="prevMonthBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="month-title" id="monthTitle">Oktober 2026</div>
+        <button id="nextMonthBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+
+      <div class="summary-cards">
+        <div class="stat-card">
+          <div class="stat-label">Plačano ta mesec</div>
+          <div class="stat-value" id="totalPaid">0,00 €</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Stanje</div>
+          <div class="stat-value" id="totalCount">0 / 0</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Bills List -->
+    <div class="bills-list" id="billsList">
+      <!-- Generated items -->
+    </div>
+
+    <!-- Add Bill Button at the end of the list -->
+    <div class="add-bill-card" onclick="openAddModal()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Dodaj novo položnico
+    </div>
+  </div>
+
+  <!-- Add New Bill Modal -->
+  <div class="modal-overlay" id="addModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">Nova položnica</div>
+        <button class="icon-btn" onclick="closeAddModal()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="form-group">
+        <label>Naziv položnice</label>
+        <input type="text" id="inputTitle" class="form-control" placeholder="npr. Elektrika, Komunala..." required>
+      </div>
+
+      <div class="form-group">
+        <label>Znesek (€)</label>
+        <input type="number" step="0.01" id="inputAmount" class="form-control" placeholder="0.00">
+      </div>
+
+      <div class="form-group">
+        <label>Pogostost položnice</label>
+        <div class="option-group">
+          <label class="option-card selected" id="optFutureLabel">
+            <input type="radio" name="addType" id="optFuture" value="future" checked onchange="updateOptionStyle()">
+            <div>
+              <strong style="font-size:14px;">Za vse mesece naprej</strong>
+              <div style="font-size:12px; color:var(--text-muted);">Redna položnica (ponavlja se vsak mesec)</div>
+            </div>
+          </label>
+
+          <label class="option-card" id="optCurrentLabel">
+            <input type="radio" name="addType" id="optCurrent" value="current" onchange="updateOptionStyle()">
+            <div>
+              <strong style="font-size:14px;">Samo za ta mesec</strong>
+              <div style="font-size:12px; color:var(--text-muted);">Enokratni strošek za tekoči mesec</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <button class="btn-submit" onclick="saveBill()">Dodaj položnico</button>
+    </div>
+  </div>
+
+  <script>
+    // Ensure legacy data is cleared so app starts completely empty
+    if (!localStorage.getItem('app_clean_start_v4')) {
+      localStorage.clear();
+      localStorage.setItem('app_clean_start_v4', 'true');
+    }
+
+    const DEFAULT_TEMPLATES = [];
+
+    const MONTH_NAMES = [
+      'Januar', 'Februar', 'Marec', 'April', 'Maj', 'Junij',
+      'Julij', 'Avgust', 'September', 'Oktober', 'November', 'December'
+    ];
+
+    let currentDate = new Date();
+
+    // Get templates
+    function getTemplates() {
+      const saved = localStorage.getItem('bill_templates');
+      return saved ? JSON.parse(saved) : DEFAULT_TEMPLATES;
+    }
+
+    function saveTemplates(templates) {
+      localStorage.setItem('bill_templates', JSON.stringify(templates));
+    }
+
+    // Get storage key for YYYY-MM
+    function getMonthKey(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      return `bills_${year}_${month}`;
+    }
+
+    // Load Month Bills
+    function getMonthBills(date) {
+      const key = getMonthKey(date);
+      const saved = localStorage.getItem(key);
+
+      if (saved) {
+        return JSON.parse(saved);
+      } else {
+        const templates = getTemplates();
+        const initialBills = templates.map(t => ({
+          id: 'b_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+          templateId: t.id,
+          title: t.title,
+          amount: t.defaultAmount || 0,
+          paid: false
+        }));
+        localStorage.setItem(key, JSON.stringify(initialBills));
+        return initialBills;
+      }
+    }
+
+    function saveMonthBills(date, bills) {
+      const key = getMonthKey(date);
+      localStorage.setItem(key, JSON.stringify(bills));
+      render();
+    }
+
+    // UI Updates
+    function updateMonthDisplay() {
+      const monthName = MONTH_NAMES[currentDate.getMonth()];
+      const year = currentDate.getFullYear();
+      document.getElementById('monthTitle').textContent = `${monthName} ${year}`;
+    }
+
+    function togglePaid(billId) {
+      const bills = getMonthBills(currentDate);
+      const bill = bills.find(b => b.id === billId);
+      if (bill) {
+        bill.paid = !bill.paid;
+        saveMonthBills(currentDate, bills);
+      }
+    }
+
+    function editBillTitle(billId) {
+      const bills = getMonthBills(currentDate);
+      const bill = bills.find(b => b.id === billId);
+      if (!bill) return;
+
+      const newTitle = prompt('Spremeni naziv položnice:', bill.title);
+      if (newTitle !== null && newTitle.trim() !== '') {
+        bill.title = newTitle.trim();
+        saveMonthBills(currentDate, bills);
+
+        if (bill.templateId) {
+          const templates = getTemplates();
+          const t = templates.find(item => item.id === bill.templateId);
+          if (t) {
+            t.title = bill.title;
+            saveTemplates(templates);
+          }
+        }
+      }
+    }
+
+    function updateAmount(billId, value) {
+      const bills = getMonthBills(currentDate);
+      const bill = bills.find(b => b.id === billId);
+      if (bill) {
+        bill.amount = parseFloat(value) || 0;
+        localStorage.setItem(getMonthKey(currentDate), JSON.stringify(bills));
+        updateSummary(bills);
+
+        if (bill.templateId) {
+          const templates = getTemplates();
+          const t = templates.find(item => item.id === bill.templateId);
+          if (t) {
+            t.defaultAmount = bill.amount;
+            saveTemplates(templates);
+          }
+        }
+      }
+    }
+
+    // Delete bill logic: if recurring, delete from ALL stored months automatically!
+    function deleteBill(billId) {
+      const bills = getMonthBills(currentDate);
+      const bill = bills.find(b => b.id === billId);
+      if (!bill) return;
+
+      if (confirm(`Želiš izbrisati položnico "${bill.title}"?`)) {
+        if (bill.templateId) {
+          // Recurring bill: delete from templates AND from ALL months in localStorage
+          let templates = getTemplates();
+          templates = templates.filter(t => t.id !== bill.templateId);
+          saveTemplates(templates);
+
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('bills_')) {
+              let monthBills = JSON.parse(localStorage.getItem(key)) || [];
+              monthBills = monthBills.filter(b => b.templateId !== bill.templateId);
+              localStorage.setItem(key, JSON.stringify(monthBills));
+            }
+          }
+        } else {
+          // One-time bill: delete only from current month
+          let updatedBills = bills.filter(b => b.id !== billId);
+          saveMonthBills(currentDate, updatedBills);
+        }
+        render();
+      }
+    }
+
+    function updateSummary(bills) {
+      let paidTotal = 0;
+      let paidCount = 0;
+
+      bills.forEach(b => {
+        const val = Number(b.amount) || 0;
+        if (b.paid) {
+          paidTotal += val;
+          paidCount++;
+        }
+      });
+
+      document.getElementById('totalPaid').textContent = paidTotal.toFixed(2).replace('.', ',') + ' €';
+      document.getElementById('totalCount').textContent = `${paidCount} od ${bills.length} plačano`;
+    }
+
+    function render() {
+      updateMonthDisplay();
+      const bills = getMonthBills(currentDate);
+      updateSummary(bills);
+
+      const listContainer = document.getElementById('billsList');
+      listContainer.innerHTML = '';
+
+      if (bills.length === 0) {
+        listContainer.innerHTML = `
+          <div class="empty-state">
+            <div style="font-size: 32px; margin-bottom: 6px;">🧾</div>
+            <p>Za ta mesec še ni vnesenih položnic.</p>
+          </div>
+        `;
+        return;
+      }
+
+      bills.forEach(bill => {
+        const card = document.createElement('div');
+        card.className = `bill-item ${bill.paid ? 'paid' : ''}`;
+
+        const checkIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+        const pencilIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>`;
+        const trashIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`;
+
+        // Visual distinction badge: Redna vs Samo ta mesec
+        const badgeHtml = bill.templateId
+          ? `<span class="badge recurring">🔄 Redna</span>`
+          : `<span class="badge single">📌 Samo ta mesec</span>`;
+
+        card.innerHTML = `
+          <div class="bill-left">
+            <div class="checkbox-circle" onclick="togglePaid('${bill.id}')">
+              ${bill.paid ? checkIcon : ''}
+            </div>
+            <div class="bill-title-container">
+              <div class="bill-title" onclick="togglePaid('${bill.id}')" title="Klikni za označenje">
+                ${escapeHtml(bill.title)}
+              </div>
+              ${badgeHtml}
+            </div>
+          </div>
+
+          <div class="bill-right">
+            <div class="amount-input-group">
+              <span>€</span>
+              <input type="number" step="0.01" class="amount-input"
+                value="${bill.amount ? bill.amount : ''}"
+                placeholder="0.00"
+                onchange="updateAmount('${bill.id}', this.value)"
+                oninput="updateAmount('${bill.id}', this.value)">
+            </div>
+            <button class="icon-btn" onclick="editBillTitle('${bill.id}')" title="Spremeni naziv">${pencilIcon}</button>
+            <button class="icon-btn danger" onclick="deleteBill('${bill.id}')" title="Izbriši">${trashIcon}</button>
+          </div>
+        `;
+
+        listContainer.appendChild(card);
+      });
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, function(m) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+      });
+    }
+
+    // Modal - Add Bill
+    function openAddModal() {
+      document.getElementById('inputTitle').value = '';
+      document.getElementById('inputAmount').value = '';
+      document.getElementById('optFuture').checked = true;
+      updateOptionStyle();
+      document.getElementById('addModal').classList.add('active');
+    }
+
+    function closeAddModal() {
+      document.getElementById('addModal').classList.remove('active');
+    }
+
+    function updateOptionStyle() {
+      const isFuture = document.getElementById('optFuture').checked;
+      document.getElementById('optFutureLabel').classList.toggle('selected', isFuture);
+      document.getElementById('optCurrentLabel').classList.toggle('selected', !isFuture);
+    }
+
+    function saveBill() {
+      const title = document.getElementById('inputTitle').value.trim();
+      const amount = parseFloat(document.getElementById('inputAmount').value) || 0;
+      const isFuture = document.getElementById('optFuture').checked;
+
+      if (!title) {
+        alert('Prosimo, vnesite naziv položnice.');
+        return;
+      }
+
+      if (isFuture) {
+        const templateId = 't_' + Date.now();
+        const templates = getTemplates();
+        templates.push({
+          id: templateId,
+          title: title,
+          defaultAmount: amount
+        });
+        saveTemplates(templates);
+
+        const currentKey = getMonthKey(currentDate);
+
+        const currentBills = getMonthBills(currentDate);
+        currentBills.push({
+          id: 'b_' + Date.now(),
+          templateId: templateId,
+          title: title,
+          amount: amount,
+          paid: false
+        });
+        saveMonthBills(currentDate, currentBills);
+
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('bills_') && key > currentKey) {
+            const monthBills = JSON.parse(localStorage.getItem(key)) || [];
+            if (!monthBills.some(b => b.templateId === templateId)) {
+              monthBills.push({
+                id: 'b_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                templateId: templateId,
+                title: title,
+                amount: amount,
+                paid: false
+              });
+              localStorage.setItem(key, JSON.stringify(monthBills));
+            }
+          }
+        }
+      } else {
+        const bills = getMonthBills(currentDate);
+        bills.push({
+          id: 'b_' + Date.now(),
+          templateId: null,
+          title: title,
+          amount: amount,
+          paid: false
+        });
+        saveMonthBills(currentDate, bills);
+      }
+
+      closeAddModal();
+      render();
+    }
+
+    // Month Navigation Controls
+    document.getElementById('prevMonthBtn').addEventListener('click', () => {
+      currentDate.setMonth(currentDate.getMonth() - 1);
+      render();
+    });
+
+    document.getElementById('nextMonthBtn').addEventListener('click', () => {
+      currentDate.setMonth(currentDate.getMonth() + 1);
+      render();
+    });
+
+    // Initial render
+    render();
+  </script>
+</body>
+</html>
