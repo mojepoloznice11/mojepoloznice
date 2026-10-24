@@ -442,12 +442,18 @@
       color: var(--text-muted);
     }
 
-    .month-selector .month-title { width:auto; height:auto; min-width:0; flex:1; border-radius:10px; }
-    .month-title { border:0; background:transparent; color:inherit; cursor:pointer; padding:6px 8px; border-radius:10px; }
+    .month-selector { gap:6px; margin-bottom:18px; }
+    .month-selector > button { flex-shrink:0; }
+    .month-selector .month-title { width:auto; height:42px; min-width:0; flex:1; border-radius:12px; gap:7px; padding:6px 5px; background:rgba(255,255,255,.10); }
+    .month-title { border:0; color:inherit; cursor:pointer; font-size:clamp(15px, 4.5vw, 21px); font-weight:750; letter-spacing:0; display:flex; align-items:center; justify-content:center; white-space:nowrap; }
+    .month-title-caret { font-size:18px; opacity:.85; line-height:1; }
     .month-title:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline:3px solid #93c5fd; outline-offset:2px; }
-    #monthPicker { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
-    .month-tools { display:flex; justify-content:center; margin:-7px 0 14px; }
-    #todayBtn { border:1px solid rgba(255,255,255,.55); background:rgba(255,255,255,.16); color:white; padding:7px 16px; border-radius:999px; font-size:13px; font-weight:700; cursor:pointer; }
+    #todayBtn { width:auto; min-width:58px; height:36px; padding:0 10px; border:1px solid rgba(255,255,255,.55); background:rgba(255,255,255,.16); color:white; border-radius:999px; font-size:12px; font-weight:750; cursor:pointer; }
+    .month-pick-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .month-modal-card .btn-secondary { width:100%; margin-top:10px; }
+    .month-modal-card .btn-submit { width:100%; }
+    @media (max-width: 380px) { .month-selector { gap:4px; } .month-selector > button:first-child, .month-selector > button:nth-of-type(2) { width:32px; height:34px; } .month-selector .month-title { padding:4px 2px; height:38px; } #todayBtn { min-width:51px; padding:0 7px; font-size:11px; } .month-title-caret { display:none; } }
+
     .bill-right { flex-wrap:wrap; }
     .bill-amount-mobile { font-size:14px; font-weight:750; color:var(--text); margin-top:4px; }
     .icon-btn { min-width:38px; min-height:38px; }
@@ -471,13 +477,12 @@
         <button id="prevMonthBtn" aria-label="Prejšnji mesec">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
-        <button class="month-title" id="monthTitle" type="button" aria-label="Izberi mesec">Oktober 2026</button>
-        <input id="monthPicker" type="month" aria-label="Izberi mesec" tabindex="-1">
+        <button class="month-title" id="monthTitle" type="button" aria-label="Izberi mesec"><span id="monthTitleText">Oktober 2026</span><span class="month-title-caret" aria-hidden="true">⌄</span></button>
         <button id="nextMonthBtn" aria-label="Naslednji mesec">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
+        <button id="todayBtn" class="today-inline" type="button">Danes</button>
       </div>
-      <div class="month-tools"><button id="todayBtn" type="button">Danes</button></div>
 
       <div class="summary-cards">
         <div class="stat-card">
@@ -500,6 +505,18 @@
     <div class="add-bill-card" onclick="openAddModal()">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Dodaj novo položnico
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="monthModal" role="dialog" aria-modal="true" aria-labelledby="monthModalTitle">
+    <div class="modal-card month-modal-card">
+      <div class="modal-header"><div class="modal-title" id="monthModalTitle">Izberi mesec</div><button class="icon-btn" type="button" id="closeMonthModal" aria-label="Zapri">✕</button></div>
+      <div class="month-pick-fields">
+        <div class="form-group"><label for="pickMonth">Mesec</label><select id="pickMonth" class="form-control"></select></div>
+        <div class="form-group"><label for="pickYear">Leto</label><select id="pickYear" class="form-control"></select></div>
+      </div>
+      <button class="btn-submit" type="button" id="applyMonthBtn">Prikaži mesec</button>
+      <button class="btn-secondary" type="button" id="monthTodayBtn">Danes – tekoči mesec</button>
     </div>
   </div>
 
@@ -575,6 +592,7 @@
     let monthBills = [];
     let authToken = sessionStorage.getItem('poloznice_api_token') || '';
     let busy = false;
+    let monthLoadSequence = 0;
 
     function getMonthKey(date) {
       return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
@@ -618,13 +636,16 @@
       list.innerHTML = `<div class="empty-state"><p>${escapeHtml(error?.message || 'Prišlo je do napake.')}</p><button class="btn-submit" onclick="loadMonth().catch(showError)">Poskusi znova</button></div>`;
     }
     async function loadMonth() {
+      const requestId = ++monthLoadSequence;
+      const requestedMonth = getMonthKey(currentDate);
       if (!authToken) { if (!(await login())) return; }
-      const data = await api('/api/month?month=' + encodeURIComponent(getMonthKey(currentDate)));
+      const data = await api('/api/month?month=' + encodeURIComponent(requestedMonth));
+      if (requestId !== monthLoadSequence || requestedMonth !== getMonthKey(currentDate)) return;
       monthBills = Array.isArray(data.bills) ? data.bills : [];
       render();
     }
     function updateMonthDisplay() {
-      document.getElementById('monthTitle').textContent = `${MONTH_NAMES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+      document.getElementById('monthTitleText').textContent = `${MONTH_NAMES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
     }
     function updateSummary(bills) {
       let paidTotal = 0, unpaidTotal = 0;
@@ -651,7 +672,7 @@
     async function togglePaid(id) {
       const bill = monthBills.find(b=>String(b.id)===String(id)); if(!bill||busy)return;
       busy=true;
-      try { await api('/api/month-bills/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({paid:!bill.paid})}); await loadMonth(); showToast(bill.paid?'Plačilo je odstranjeno.':'Položnica označena kot plačana.'); }
+      try { const newPaid = !bill.paid; await api('/api/month-bills/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({paid:newPaid})}); bill.paid = newPaid; render(); showToast(newPaid?'Položnica označena kot plačana.':'Plačilo je odstranjeno.'); }
       catch(e){showError(e); showToast('Shranjevanje ni uspelo. '+(e.message||''),true)} finally{busy=false;}
     }
     let editingBill = null;
@@ -713,9 +734,22 @@
     async function changeMonth(delta) { currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth()+delta, 1); updateMonthDisplay(); try { await loadMonth(); } catch(e) { showError(e); showToast('Meseca ni bilo mogoče naložiti.', true); } }
     document.getElementById('prevMonthBtn').addEventListener('click',()=>changeMonth(-1));
     document.getElementById('nextMonthBtn').addEventListener('click',()=>changeMonth(1));
-    document.getElementById('todayBtn').addEventListener('click',()=>{currentDate=new Date();currentDate.setDate(1);changeMonth(0)});
-    document.getElementById('monthTitle').addEventListener('click',()=>{const picker=document.getElementById('monthPicker');picker.value=getMonthKey(currentDate);if(picker.showPicker) picker.showPicker(); else picker.click();});
-    document.getElementById('monthPicker').addEventListener('change',e=>{if(!e.target.value)return;const [y,m]=e.target.value.split('-').map(Number);currentDate=new Date(y,m-1,1);loadMonth().catch(showError)});
+    document.getElementById('todayBtn').addEventListener('click',()=>{currentDate=new Date();currentDate.setDate(1);loadMonth().catch(showError)});
+    function openMonthPicker() {
+      const monthSelect = document.getElementById('pickMonth');
+      const yearSelect = document.getElementById('pickYear');
+      if (!monthSelect.options.length) MONTH_NAMES.forEach((name, index) => monthSelect.add(new Option(name, String(index + 1))));
+      if (!yearSelect.options.length) { const y = new Date().getFullYear(); for (let year = y - 10; year <= y + 10; year++) yearSelect.add(new Option(String(year), String(year))); }
+      monthSelect.value = String(currentDate.getMonth() + 1);
+      yearSelect.value = String(currentDate.getFullYear());
+      document.getElementById('monthModal').classList.add('active');
+    }
+    function closeMonthPicker() { document.getElementById('monthModal').classList.remove('active'); }
+    document.getElementById('monthTitle').addEventListener('click', openMonthPicker);
+    document.getElementById('closeMonthModal').addEventListener('click', closeMonthPicker);
+    document.getElementById('applyMonthBtn').addEventListener('click', () => { currentDate = new Date(Number(document.getElementById('pickYear').value), Number(document.getElementById('pickMonth').value) - 1, 1); closeMonthPicker(); loadMonth().catch(showError); });
+    document.getElementById('monthTodayBtn').addEventListener('click', () => { currentDate = new Date(); currentDate.setDate(1); closeMonthPicker(); loadMonth().catch(showError); });
+    document.getElementById('monthModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeMonthPicker(); });
     document.querySelectorAll('.modal-overlay').forEach(overlay=>overlay.addEventListener('click',e=>{if(e.target===overlay){overlay.classList.remove('active');if(overlay.id==='editModal')editingBill=null;}}));
     document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeAddModal();closeEditModal();}});
     loadMonth().catch(showError);
