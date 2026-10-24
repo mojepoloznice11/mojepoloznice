@@ -559,7 +559,9 @@
       </div>
       <div class="form-group"><label for="editTitle">Naziv položnice</label><input type="text" id="editTitle" class="form-control" maxlength="200" required></div>
       <div class="form-group"><label for="editAmount">Znesek (€)</label><input type="number" id="editAmount" class="form-control" min="0" step="0.01" inputmode="decimal" required></div>
-      <div class="form-group"><label>Veljavnost spremembe</label><div class="form-control" aria-readonly="true">Od izbranega meseca naprej</div><small class="form-help">Naziv se v trenutnem API-ju spremeni za vse mesece. Znesek velja od izbranega meseca naprej; pretekli meseci ostanejo nespremenjeni.</small></div>
+      <div class="form-group"><label for="editStartMonth">Velja od meseca</label><input type="month" id="editStartMonth" class="form-control" required></div>
+      <div class="form-group"><label for="editEndMonth">Velja do meseca (neobvezno)</label><input type="month" id="editEndMonth" class="form-control"><small class="form-help">Pusti prazno, če položnica nima določenega končnega meseca. Že ustvarjeni mesečni zapisi in plačila ostanejo ohranjeni.</small></div>
+      <div class="form-group"><label>Od kdaj velja novi znesek?</label><div class="option-group"><label class="option-card selected" id="editFutureLabel"><input type="radio" name="editAmountScope" id="editAmountFuture" value="future" checked onchange="updateEditScopeStyle()"><div><strong style="font-size:14px">Od izbranega meseca naprej</strong><div style="font-size:12px;color:var(--text-muted)">Pretekli meseci ostanejo nespremenjeni</div></div></label><label class="option-card" id="editCurrentLabel"><input type="radio" name="editAmountScope" id="editAmountCurrent" value="current" onchange="updateEditScopeStyle()"><div><strong style="font-size:14px">Samo izbrani mesec</strong><div style="font-size:12px;color:var(--text-muted)">Spremeni se samo ta mesečni znesek</div></div></label></div></div>
       <button class="btn-submit" type="button" onclick="saveEditBill()">Shrani spremembe</button>
       <button class="btn-secondary" type="button" onclick="closeEditModal()">Prekliči</button>
     </div>
@@ -658,21 +660,26 @@
       if (!editingBill) return;
       document.getElementById('editTitle').value = editingBill.title;
       document.getElementById('editAmount').value = Number(editingBill.amount)||0;
-      document.getElementById('editScope').value = 'future';
+      document.getElementById('editStartMonth').value = editingBill.startMonth || getMonthKey(currentDate);
+      document.getElementById('editEndMonth').value = editingBill.endMonth || '';
+      document.getElementById('editAmountFuture').checked = true; updateEditScopeStyle();
       document.getElementById('editModal').classList.add('active');
       setTimeout(() => document.getElementById('editTitle').focus(), 50);
     }
     function closeEditModal() { document.getElementById('editModal').classList.remove('active'); editingBill = null; }
+    function updateEditScopeStyle(){const future=document.getElementById('editAmountFuture').checked;document.getElementById('editFutureLabel').classList.toggle('selected',future);document.getElementById('editCurrentLabel').classList.toggle('selected',!future);}
     async function saveEditBill() {
       if (!editingBill || busy) return;
       const title = document.getElementById('editTitle').value.trim();
       const amount = Number(document.getElementById('editAmount').value);
       if (!title || title.length > 200) { showToast('Vnesi naziv (največ 200 znakov).', true); return; }
       if (!Number.isFinite(amount) || amount < 0 || amount > 100000000) { showToast('Vnesi veljaven znesek.', true); return; }
+      const startMonth=document.getElementById('editStartMonth').value; const endMonth=document.getElementById('editEndMonth').value;
+      if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(startMonth) || (endMonth && (!/^\d{4}-(0[1-9]|1[0-2])$/.test(endMonth) || endMonth < startMonth))){showToast('Preveri začetni in končni mesec.',true);return;}
       busy = true;
       try {
         const id = editingBill.id;
-        await api('/api/month-bills/'+encodeURIComponent(id), {method:'PATCH', body:JSON.stringify({title, amount})});
+        await api('/api/month-bills/'+encodeURIComponent(id), {method:'PATCH', body:JSON.stringify({title, amount, startMonth, endMonth: endMonth || null, amountScope: document.getElementById('editAmountCurrent').checked ? 'current' : 'future'})});
         showToast('Spremembe so shranjene v bazi.');
         closeEditModal(); await loadMonth();
       } catch(e) { showError(e); showToast('Shranjevanje ni uspelo: '+(e.message||''), true); }
@@ -680,7 +687,11 @@
     }
     async function deleteBill(id) {
       const bill=monthBills.find(b=>String(b.id)===String(id)); if(!bill)return;
-      showToast('Brisanje je začasno izklopljeno, da zaščitimo zgodovino plačil.', true);
+      if(!confirm(`Arhiviram »${bill.title}« od ${getMonthKey(currentDate)} naprej? Pretekli mesečni zapisi in plačila bodo ohranjeni; položnica bo skrita v tem in prihodnjih mesecih.`)) return;
+      if(busy)return; busy=true;
+      try { await api('/api/month-bills/'+encodeURIComponent(id),{method:'DELETE',body:JSON.stringify({fromMonth:getMonthKey(currentDate)})}); await loadMonth(); showToast('Položnica je arhivirana. Zgodovina je ohranjena.'); }
+      catch(e){showToast('Arhiviranje ni uspelo: '+(e.message||''),true);}
+      finally{busy=false;}
     }
     function openAddModal() {
       document.getElementById('inputTitle').value=''; document.getElementById('inputAmount').value='';
