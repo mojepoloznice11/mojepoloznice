@@ -536,7 +536,7 @@
 
       <div class="form-group">
         <label>Znesek (€)</label>
-        <input type="number" step="0.01" id="inputAmount" class="form-control" placeholder="0.00">
+        <input type="text" id="inputAmount" class="form-control" inputmode="decimal" autocomplete="off" placeholder="npr. 12,50">
       </div>
 
       <div class="form-group">
@@ -582,7 +582,7 @@
         <button class="icon-btn" type="button" onclick="closeEditModal()" aria-label="Zapri">✕</button>
       </div>
       <div class="form-group"><label for="editTitle">Naziv položnice</label><input type="text" id="editTitle" class="form-control" maxlength="200" required></div>
-      <div class="form-group"><label for="editAmount">Znesek (€)</label><input type="number" id="editAmount" class="form-control" min="0" step="0.01" inputmode="decimal" required></div>
+      <div class="form-group"><label for="editAmount">Znesek (€)</label><input type="text" id="editAmount" class="form-control" inputmode="decimal" autocomplete="off" placeholder="npr. 12,50" required></div>
       <div class="form-group"><label for="editStartMonth">Velja od meseca</label><input type="month" id="editStartMonth" class="form-control" required></div>
       <div class="form-group"><label for="editEndMonth">Velja do meseca (neobvezno)</label><input type="month" id="editEndMonth" class="form-control"><small class="form-help">Pusti prazno, če položnica nima določenega končnega meseca. Že ustvarjeni mesečni zapisi in plačila ostanejo ohranjeni.</small></div>
       <div class="form-group"><label>Od kdaj velja novi znesek?</label><div class="option-group"><label class="option-card selected" id="editFutureLabel"><input type="radio" name="editAmountScope" id="editAmountFuture" value="future" checked onchange="updateEditScopeStyle()"><div><strong style="font-size:14px">Od izbranega meseca naprej</strong><div style="font-size:12px;color:var(--text-muted)">Pretekli meseci ostanejo nespremenjeni</div></div></label><label class="option-card" id="editCurrentLabel"><input type="radio" name="editAmountScope" id="editAmountCurrent" value="current" onchange="updateEditScopeStyle()"><div><strong style="font-size:14px">Samo izbrani mesec</strong><div style="font-size:12px;color:var(--text-muted)">Spremeni se samo ta mesečni znesek</div></div></label></div></div>
@@ -595,6 +595,26 @@
     // Podatki o položnicah se berejo in shranjujejo izključno prek Cloudflare Worker API-ja.
     const API_BASE = 'https://moje-poloznice-api.mojepoloznice11.workers.dev';
     const MONTH_NAMES = ['Januar','Februar','Marec','April','Maj','Junij','Julij','Avgust','September','Oktober','November','December'];
+    // Znesek pretvori v cele cente; podpira slovensko decimalno vejico in decimalno piko.
+    function parseEuroCents(raw) {
+      let value = String(raw ?? '').trim().replace(/[\s\u00a0\u202f€]/g, '');
+      if (!value) return null;
+      const comma = value.lastIndexOf(',');
+      const dot = value.lastIndexOf('.');
+      if (comma >= 0 && dot >= 0) {
+        const decimal = comma > dot ? ',' : '.';
+        const grouping = decimal === ',' ? /\./g : /,/g;
+        value = value.replace(grouping, '').replace(decimal, '.');
+      } else if (comma >= 0) {
+        value = value.replace(/,/g, '.');
+      }
+      if (!/^\d+(?:\.\d{1,2})?$/.test(value)) return null;
+      const parts = value.split('.');
+      const euros = Number(parts[0]);
+      const cents = parts.length > 1 ? Number((parts[1] + '0').slice(0, 2)) : 0;
+      const total = euros * 100 + cents;
+      return Number.isSafeInteger(total) && total <= 10000000000 ? total : null;
+    }
     let currentDate = new Date();
     let monthBills = [];
     let authToken = sessionStorage.getItem('poloznice_api_token') || '';
@@ -687,7 +707,7 @@
       editingBill = monthBills.find(b => String(b.id) === String(id));
       if (!editingBill) return;
       document.getElementById('editTitle').value = editingBill.title;
-      document.getElementById('editAmount').value = Number(editingBill.amount)||0;
+      document.getElementById('editAmount').value = ((Math.round((Number(editingBill.amount)||0)*100)/100).toFixed(2)).replace('.', ',');
       document.getElementById('editStartMonth').value = editingBill.startMonth || getMonthKey(currentDate);
       document.getElementById('editEndMonth').value = editingBill.endMonth || '';
       document.getElementById('editAmountFuture').checked = true; updateEditScopeStyle();
@@ -699,15 +719,15 @@
     async function saveEditBill() {
       if (!editingBill || busy) return;
       const title = document.getElementById('editTitle').value.trim();
-      const amount = Number(document.getElementById('editAmount').value);
+      const amountCents = parseEuroCents(document.getElementById('editAmount').value);
       if (!title || title.length > 200) { showToast('Vnesi naziv (največ 200 znakov).', true); return; }
-      if (!Number.isFinite(amount) || amount < 0 || amount > 100000000) { showToast('Vnesi veljaven znesek.', true); return; }
+      if (amountCents === null) { showToast('Vnesi veljaven znesek, npr. 12,50 (največ dve decimalni mesti).', true); return; }
       const startMonth=document.getElementById('editStartMonth').value; const endMonth=document.getElementById('editEndMonth').value;
       if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(startMonth) || (endMonth && (!/^\d{4}-(0[1-9]|1[0-2])$/.test(endMonth) || endMonth < startMonth))){showToast('Preveri začetni in končni mesec.',true);return;}
       busy = true;
       try {
         const id = editingBill.id;
-        await api('/api/month-bills/'+encodeURIComponent(id), {method:'PATCH', body:JSON.stringify({title, amount, startMonth, endMonth: endMonth || null, amountScope: document.getElementById('editAmountCurrent').checked ? 'current' : 'future'})});
+        await api('/api/month-bills/'+encodeURIComponent(id), {method:'PATCH', body:JSON.stringify({title, amountCents, startMonth, endMonth: endMonth || null, amountScope: document.getElementById('editAmountCurrent').checked ? 'current' : 'future'})});
         showToast('Spremembe so shranjene v bazi.');
         closeEditModal(); await loadMonth();
       } catch(e) { showError(e); showToast('Shranjevanje ni uspelo: '+(e.message||''), true); }
@@ -730,15 +750,15 @@
     function updateOptionStyle(){const future=document.getElementById('optFuture').checked;document.getElementById('optFutureLabel').classList.toggle('selected',future);document.getElementById('optCurrentLabel').classList.toggle('selected',!future);document.getElementById('inputEndMonth').disabled=!future;if(!future)document.getElementById('inputEndMonth').value=document.getElementById('inputStartMonth').value;}
     async function saveBill() {
       const title=document.getElementById('inputTitle').value.trim();
-      const amount=Number(document.getElementById('inputAmount').value);
+      const amountCents=parseEuroCents(document.getElementById('inputAmount').value);
       const recurring=document.getElementById('optFuture').checked;
       const startMonth=document.getElementById('inputStartMonth').value;
       const endMonth=recurring?(document.getElementById('inputEndMonth').value||null):startMonth;
       if(!title){alert('Prosimo, vnesite naziv položnice.');return;}
-      if(!Number.isFinite(amount)||amount<0){alert('Prosimo, vnesite veljaven znesek.');return;}
+      if(amountCents===null){alert('Prosimo, vnesite veljaven znesek, npr. 12,50 (največ dve decimalni mesti).');return;}
       if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(startMonth)||(endMonth&&(!/^\d{4}-(0[1-9]|1[0-2])$/.test(endMonth)||endMonth<startMonth))){showToast('Preveri začetni in končni mesec.',true);return;}
       try {
-        await api('/api/bills',{method:'POST',body:JSON.stringify({title,amount,month:startMonth,startMonth,endMonth,recurring})});
+        await api('/api/bills',{method:'POST',body:JSON.stringify({title,amountCents,month:startMonth,startMonth,endMonth,recurring})});
         closeAddModal(); await loadMonth(); showToast('Položnica je shranjena v bazi.');
       } catch(e){showError(e); showToast('Položnice ni bilo mogoče shraniti.', true)}
     }
